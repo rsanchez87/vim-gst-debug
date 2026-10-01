@@ -604,7 +604,21 @@ export def FilterField(fieldname: string, inverse: bool = false)
     endif
 enddef
 
-def FilterReset()
+export def FilterReset()
+    if &buftype != '' || expand('%') == ''
+        echom "FilterReset: current buffer is not a file."
+        return
+    endif
+
+    # Filtering only rewrites the buffer, so reloading from disk undoes it.
+    edit!
+
+    # Re-entering the buffer can clear the filetype, so restore it
+    if &filetype != 'gstreamerlogs'
+        setlocal filetype=gstreamerlogs
+    endif
+
+    echom $"FilterReset: reloaded {expand('%:t')} from disk."
 enddef
 
 ###################################################

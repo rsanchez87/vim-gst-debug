@@ -73,6 +73,7 @@ command! -buffer FilterCategory    gst_debug#FilterField("category")
 command! -buffer FilterSource      gst_debug#FilterField("_source")
 command! -buffer FilterElement     gst_debug#FilterField("element")
 command! -buffer FilterElementName gst_debug#FilterField("_element_name")
+command! -buffer FilterReset       gst_debug#FilterReset()
 
 
 # Faster saving for large files: :w is now :noautocmd w
