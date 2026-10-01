@@ -412,7 +412,7 @@ def JumpToAppearance(jump_type: string)
 enddef
 
 # FIXME have awk script files as assets. Try to regularize for regex single-source-of-truth
-def ListField(target_field: string)
+export def ListField(target_field: string)
     const log_bufnr = bufnr('%')
     echom $"Scanning buffer for {target_field}s via awk..."
 
@@ -547,11 +547,6 @@ def ListField(target_field: string)
     setlocal nomodifiable
 enddef
 
-
-command! ListElements   ListField('element')
-command! ListLevels     ListField('level')
-command! ListCategories ListField('category')
-command! ListSources    ListField('source')
 
 ###################################################
 ##  Filters

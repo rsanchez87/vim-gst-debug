@@ -76,6 +76,13 @@ command! -buffer FilterElementName gst_debug#FilterField("_element_name")
 command! -buffer FilterReset       gst_debug#FilterReset()
 
 
+# Listing: opens a scratch buffer with the unique values of a field
+command! -buffer ListElements   gst_debug#ListField('element')
+command! -buffer ListLevels     gst_debug#ListField('level')
+command! -buffer ListCategories gst_debug#ListField('category')
+command! -buffer ListSources    gst_debug#ListField('source')
+
+
 # Faster saving for large files: :w is now :noautocmd w
 cnoreabbrev <expr> <buffer> w (getcmdtype() == ':' && getcmdline() == 'w') ? 'noautocmd w' : 'w'
 
