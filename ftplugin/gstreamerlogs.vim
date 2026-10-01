@@ -50,8 +50,8 @@ nnoremap <buffer> g<C-p> <Cmd>call gst_debug#SearchFieldUnderCursor(1, 1)<CR>
 for level in ['error', 'warn', 'fixme', 'info', 'debug', 'log', 'trace', 'memdump']
     var cmd_name = toupper(level[0]) .. tolower(level[1 : ])
 
-    execute $'command! -buffer NextLevel{level} gst_debug#SearchFieldValue("level", "{toupper(level)}", 0, 0)'
-    execute $'command! -buffer PrevLevel{level} gst_debug#SearchFieldValue("level", "{toupper(level)}", 1, 0)'
+    execute $'command! -buffer NextLevel{cmd_name} gst_debug#SearchFieldValue("level", "{toupper(level)}", 0, 0)'
+    execute $'command! -buffer PrevLevel{cmd_name} gst_debug#SearchFieldValue("level", "{toupper(level)}", 1, 0)'
 endfor
 
 
