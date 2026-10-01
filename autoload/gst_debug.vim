@@ -5,7 +5,7 @@ vim9script
 
 # Because user may not be comfortable with switching buffer views
 # b:buffer_single = get(g:, gst_debug_buffer_single, true)
-g:gst_debug_debug = true
+g:gst_debug_debug = get(g:, 'gst_debug_debug', v:true)
 g:gst_debug_multiline_scan_len = 50
 
 const s_level_map = {
@@ -168,7 +168,7 @@ export def ParseMultiLine(a_lnum: number = -1): list<any>
 enddef
 
 
-def SearchFieldValueBuildRegex(target_field: string, target_value: string, inverse: bool = false): string
+export def SearchFieldValueBuildRegex(target_field: string, target_value: string, inverse: bool = false): string
     var field_found = false
     var regex = '^'
 
