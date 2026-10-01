@@ -29,9 +29,19 @@ const s_schema = [
 
 # Derived schema: Expressions and combinations.
 const s_derived_schema = {
-    _source:   { parent: 'level', expr: (ctx) => $"{ctx.file}:{ctx.lineno}:{ctx.function}"},
-    _levelnum: { parent: 'level', expr: (ctx) => s_level_map[ctx.level] },
-    _findexpr: { parent: 'file',  expr: (ctx) => "^" .. ctx.timestamp .. '\s\+' .. ctx.pid .. '\s\+' .. ctx.thread}
+    _source:       { parent: 'level',   expr: (ctx) => $"{ctx.file}:{ctx.lineno}:{ctx.function}"},
+    _element_name: { parent: 'element', expr: (ctx) => substitute(ctx.element, '^<\([^@>]*\).*$', '\1', '')},
+    _levelnum:     { parent: 'level',   expr: (ctx) => s_level_map[ctx.level] },
+    _findexpr:     { parent: 'file',    expr: (ctx) => "^" .. ctx.timestamp .. '\s\+' .. ctx.pid .. '\s\+' .. ctx.thread}
+}
+
+# Derived fields are not physical tokens: they are anchored right after the
+# physical field named in `anchor` and matched as a literal at that position.
+# NOTE: keep these suffixes free of `\|` alternation, which VimRegexToPCRE
+# does not translate to PCRE. Character classes are safe.
+const s_derived_position = {
+    _source:       { anchor: 'category', prefix: '',     suffix: ':' },
+    _element_name: { anchor: 'function', prefix: '\s*<', suffix: '[@>]' },
 }
 
 # Yields a list of regexes to parse a line.
@@ -169,13 +179,32 @@ enddef
 
 
 export def SearchFieldValueBuildRegex(target_field: string, target_value: string, inverse: bool = false): string
-    var field_found = false
     var regex = '^'
+    const target_value_safe = escape(target_value, '.\*$^~[]')
+
+    # Derived fields: consume the physical fields up to the anchor, then match
+    # the derived value as a literal where it appears.
+    if has_key(s_derived_position, target_field)
+        const pos = s_derived_position[target_field]
+
+        for field in s_schema
+            regex ..= field.parser .. field.sep
+            if field.name == pos.anchor
+                break
+            endif
+        endfor
+
+        if inverse
+            return regex .. '\%(' .. pos.prefix .. target_value_safe .. pos.suffix .. '\)\@!'
+        endif
+        return regex .. pos.prefix .. target_value_safe .. pos.suffix
+    endif
+
+    var field_found = false
 
     for field in s_schema
         if field.name == target_field
             field_found = true
-            var target_value_safe = escape(target_value, '.\*$^~[]')
 
             if inverse
                 regex ..= '\%(' .. target_value_safe .. '\)\@!' .. field.parser

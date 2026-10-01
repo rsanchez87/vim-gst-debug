@@ -70,9 +70,9 @@ command! -buffer FilterPID         gst_debug#FilterField("pid")
 command! -buffer FilterThread      gst_debug#FilterField("thread")
 command! -buffer FilterLevel       gst_debug#FilterField("level")
 command! -buffer FilterCategory    gst_debug#FilterField("category")
-command! -buffer FilterSource      gst_debug#FilterField("source")
+command! -buffer FilterSource      gst_debug#FilterField("_source")
 command! -buffer FilterElement     gst_debug#FilterField("element")
-command! -buffer FilterElementName gst_debug#FilterField("u_element_name")
+command! -buffer FilterElementName gst_debug#FilterField("_element_name")
 
 
 # Faster saving for large files: :w is now :noautocmd w
