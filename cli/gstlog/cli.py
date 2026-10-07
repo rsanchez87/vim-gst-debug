@@ -86,7 +86,7 @@ def cmd_evidence(args):
     ev = _evidence(args.log, args)
     if args.format == "jsonl":
         for i, item in enumerate(ev.items, 1):
-            print(json.dumps({"ref": f"E{i}", "count": item.count, "context": item.context,
+            print(json.dumps({"ref": f"E{i}", "count": item.count, "kind": item.kind,
                               "line": item.line.number, "level": item.line.level,
                               "category": item.line.category, "raw": item.line.raw}))
     else:

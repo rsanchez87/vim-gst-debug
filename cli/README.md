@@ -35,6 +35,10 @@ gstlog analyze pipeline.log --format md        # Markdown for a CI job summary
 # 4. Measure it on a set of cases (log + pipeline.txt + junit.xml per directory)
 gstlog eval ../gst-cases --expected examples/expected.tsv --preset deepseek
 gstlog eval ../gst-cases --expected examples/expected.tsv --provider heuristic   # baseline
+
+# Harder cases: the cause is not in an ERROR (07, 08) or is buried in a WARN (09)
+gstlog eval ../hard --expected ../hard/expected.tsv --preset deepseek
+gstlog eval ../hard --expected ../hard/expected.tsv --provider heuristic
 ```
 
 With no LLM configured, `analyze` and `eval` use the offline heuristic (a keyword baseline the
@@ -68,8 +72,10 @@ Supporting a non-OpenAI protocol means adding one `Provider` subclass in `gstlog
 
 - GStreamer timestamps are relative to process start; there is no anchoring to a test report
   time yet, so `--window` is relative to the first problem in the log.
-- Evidence is level-based (ERROR/WARN). Failures with no ERROR/WARN (stalls, hangs, timing)
-  need a different selector; the six bundled cases are all easy ones.
+- Evidence = ERROR/WARN lines + a short list of hand-picked trouble phrases found at DEBUG/INFO
+  level (`queue is full`, `leaking`, `buffer too late`...; see `gstlog/evidence.py`). That covers
+  stalls and silent frame loss in the bundled hard cases, but the phrase list is small: failures
+  that leave no such phrase still need a new selector.
 - Verified only against a mock OpenAI-compatible server (see `tests/`), not yet against the
   real DeepSeek API.
 

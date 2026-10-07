@@ -13,8 +13,10 @@ from gstlog.redact import redact
 SYSTEM_PROMPT = (
     "You diagnose failing GStreamer pipelines. You receive the pipeline description, the "
     "test failure message and a short, deduplicated excerpt of the GStreamer debug log "
-    "(items E1, E2, ...; [xN] means the line repeated N times, [ctx] is context before the "
-    "first problem). Identify the most likely root cause using ONLY this evidence. If the "
+    "(items E1, E2, ...; [xN] means an ERROR/WARN line repeated N times, [ctx] is context "
+    "before the first problem, [sig xN] is a DEBUG/INFO line with a classic trouble phrase such "
+    "as 'queue is full' or 'leaking', repeated N times: not an error by itself, but it can be "
+    "the cause when the failure raises no ERROR/WARN). Identify the most likely root cause using ONLY this evidence. If the "
     "evidence only shows a symptom, say so. Answer with a single JSON object with keys: "
     '"summary" (1-2 sentences), "root_cause" (short phrase), "confidence" ("high", '
     '"medium" or "low"), "evidence" (list of item ids such as "E1" that support it), '
@@ -31,7 +33,7 @@ def build_user_prompt(evidence: Evidence, pipeline: Optional[str], failure: Opti
         parts.append(f"Pipeline:\n{pipeline.strip()}")
     if failure:
         parts.append(f"Test failure message:\n{failure.strip()[:500]}")
-    parts.append("Log evidence:\n" + (evidence.text or "(no ERROR/WARN lines found)"))
+    parts.append("Log evidence:\n" + (evidence.text or "(no ERROR/WARN or trouble-phrase lines found)"))
     text = "\n\n".join(parts)
     return redact(text) if do_redact else text
 
@@ -82,7 +84,7 @@ def heuristic(evidence: Evidence) -> dict:
         m = re.search(pattern, blob)
         if m:
             idx = next((n for n, it in enumerate(evidence.items, 1)
-                        if not it.context and re.search(pattern, it.line.message.lower())), 1)
+                        if it.kind == "severe" and re.search(pattern, it.line.message.lower())), 1)
             detail = f" ({m.group(1)})" if m.groups() else ""
             return {"summary": f"{cause}{detail}: {severe[0].line.message[:160]}",
                     "root_cause": cause, "confidence": "medium", "evidence": [f"E{idx}"],

@@ -41,8 +41,8 @@ SAMPLE = """\
 0:00:00.100000000 10 0xaaa INFO  filesrc gstfilesrc.c:465:gst_file_src_start:<filesrc0> opening file /home/alice/clip.mp4
 0:00:00.200000000 10 0xaaa DEBUG basesrc gstbasesrc.c:1:fn:<filesrc0> noise
 0:00:00.300000000 10 0xaaa WARN  filesrc gstfilesrc.c:553:gst_file_src_start:<filesrc0> error: No such file "/home/alice/clip.mp4"
-0:00:00.400000000 10 0xaaa WARN  structure gststructure.c:2099:append: No value transform 11
-0:00:00.500000000 10 0xaaa WARN  structure gststructure.c:2099:append: No value transform 22
+0:00:00.400000000 10 0xaaa WARN  structure gstfoo.c:1:retry: retry attempt 11
+0:00:00.500000000 10 0xaaa WARN  structure gstfoo.c:1:retry: retry attempt 22
 0:00:00.600000000 10 0xaaa ERROR GST_PIPELINE grammar.y:1:parse: failed to connect to 10.1.2.3:554 user:pw@host
 not a log line
 """
