@@ -91,6 +91,44 @@ def heuristic(evidence: Evidence, failure: Optional[str] = None) -> dict:
             "recommendation": f"Inspect {first.file}:{first.src_line} ({first.func})."}
 
 
+_RANK = {"low": 0, "medium": 1, "high": 2}
+_NAME = ["low", "medium", "high"]
+
+
+def evidence_ceiling(evidence: Evidence, failure: Optional[str] = None) -> tuple:
+    """Highest confidence the evidence can justify, and why. Independent of what the LLM claims."""
+    ms = match(evidence, failure)
+    if ms:
+        m = ms[0]
+        if m.rule.score >= 85 and m.item is not None and m.item.kind == "severe":
+            return "high", f"specific error pattern ({m.rule.id}) in an ERROR/WARN line"
+        if m.rule.score >= 60:
+            return "medium", f"best pattern ({m.rule.id}) does not pin down the cause"
+        return "low", f"only a generic pattern ({m.rule.id})"
+    if evidence.severe:
+        return "low", "no known error pattern in the evidence"
+    return "low", "no ERROR/WARN line and no known trouble phrase"
+
+
+def calibrate(diag: dict, evidence: Evidence, failure: Optional[str] = None) -> dict:
+    """Never let the stated confidence exceed what the evidence supports."""
+    valid = {f"E{i}" for i in range(1, len(evidence.items) + 1)}
+    refs = [r for r in diag.get("evidence", []) if r in valid]
+    level, notes = diag["confidence"], []
+    if len(refs) != len(diag.get("evidence", [])):
+        notes.append("dropped citations to evidence that does not exist")
+        level = _NAME[max(_RANK[level] - 1, 0)]
+    if not refs and _RANK[level] > 0:
+        notes.append("no cited evidence")
+        level = _NAME[_RANK[level] - 1]
+    cap, why = evidence_ceiling(evidence, failure)
+    if _RANK[level] > _RANK[cap]:
+        notes.append(f"capped to {cap}: {why}")
+        level = cap
+    return {**diag, "evidence": refs, "confidence": level,
+            "llm_confidence": diag["confidence"], "confidence_note": "; ".join(notes)}
+
+
 def analyze(evidence: Evidence, provider: Optional[Provider], pipeline: Optional[str] = None,
             failure: Optional[str] = None, do_redact: bool = True, use_hints: bool = True) -> dict:
     if provider is None:
@@ -98,7 +136,7 @@ def analyze(evidence: Evidence, provider: Optional[Provider], pipeline: Optional
     hints = hint_lines(evidence, failure) if use_hints else None
     prompt = build_user_prompt(evidence, pipeline, failure, do_redact, hints)
     try:
-        answer = _parse_answer(provider.complete(SYSTEM_PROMPT, prompt))
+        answer = calibrate(_parse_answer(provider.complete(SYSTEM_PROMPT, prompt)), evidence, failure)
         return {**answer, "source": f"llm:{provider.name}"}
     except (LLMError, ValueError, json.JSONDecodeError) as e:
         return {**heuristic(evidence, failure), "source": f"heuristic (LLM failed: {e})"}

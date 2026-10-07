@@ -87,7 +87,9 @@ def _print_diagnosis(d, fmt):
               f"_Source: {d['source']}; evidence: {', '.join(d['evidence']) or 'n/a'}_")
     else:
         print(f"summary:        {d['summary']}\nroot cause:     {d.get('root_cause', '')}\n"
-              f"confidence:     {d['confidence']}\nevidence:       {', '.join(d['evidence']) or 'n/a'}\n"
+              f"confidence:     {d['confidence']}"
+              + (f"  (LLM said {d['llm_confidence']}: {d['confidence_note']})" if d.get("confidence_note") else "")
+              + f"\nevidence:       {', '.join(d['evidence']) or 'n/a'}\n"
               f"recommendation: {d['recommendation']}\nsource:         {d['source']}")
 
 
@@ -163,7 +165,12 @@ def cmd_eval(args):
     print(f"{'case':26} {'conf':7} {'result':6} {'log bytes':>10} {'sent bytes':>10}  source")
     for r in rows:
         print(f"{r[0]:26} {r[1]:7} {r[2]:6} {r[3]:>10} {r[4]:>10}  {r[5]}")
-    print(f"\n{passed}/{len(rows)} passed")
+    by_conf = {}
+    for r in rows:
+        by_conf.setdefault(r[1], [0, 0])[0 if r[2] == "PASS" else 1] += 1
+    print("\nconfidence vs result: " + ", ".join(
+        f"{c}: {v[0]} pass / {v[1]} fail" for c, v in sorted(by_conf.items())))
+    print(f"{passed}/{len(rows)} passed")
     return 0 if rows and passed == len(rows) else 1
 
 

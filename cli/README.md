@@ -122,6 +122,25 @@ Supporting a non-OpenAI protocol means adding one `Provider` subclass in `gstlog
 pip install pytest && pytest
 ```
 
+## Confidence calibration
+
+The LLM's own `confidence` is not trusted. The reported confidence is the minimum of what the LLM
+said and a ceiling computed from the evidence (`evidence_ceiling` in `gstlog/analyze.py`):
+
+| Evidence | Ceiling |
+|---|---|
+| a specific catalog pattern (score >= 85) in an ERROR/WARN line | high |
+| a mid-specificity pattern (score 60-84: link failed, queue full/leaking) | medium |
+| only generic wrappers, an unknown error, or nothing recognizable | low |
+
+Citations to evidence items that do not exist are dropped (and cost one level), and an answer that
+cites nothing is lowered one level. The original value is kept as `llm_confidence`, with a
+`confidence_note` saying why it changed. `gstlog eval` ends with a `confidence vs result` line so you
+can check that `high` really means right.
+
+Trade-off: it is conservative. A correct answer about an error the catalog does not know is capped to
+`low` (it cannot be verified), so novel errors will look less certain than they are.
+
 ## Results so far (DeepSeek `deepseek-chat`, 2026-10-07)
 
 | Set | Heuristic | LLM + hints | LLM, no hints |
@@ -130,12 +149,22 @@ pip install pytest && pytest
 | holdout (5), log only (`--blind`) | 2/5 | 4/5 | 4/5 |
 | hard (3), log only | n/a | 3/3 | not measured |
 
+Confidence of the 8 log-only LLM answers, before and after calibration:
+
+| | high | medium | low |
+|---|---|---|---|
+| LLM's own | 7 pass / 1 fail | 1 pass | - |
+| calibrated | 3 pass / 0 fail | 3 pass / 1 fail | 1 pass |
+
+The calibration rule was designed after seeing the one failure (`h3`), so this table is in-sample.
+It needs fresh cases to be confirmed.
+
 Findings (8 synthetic cases: enough to show the method, not to quote a rate):
 
 - Hints do not change pass rates but change recommendations. With a specific, correct rule
   (queue leaking/backpressure) the advice improves ("enlarging the queue only delays the stall").
   With a generic rule (`link-failed`) they can mislead: for an invalid caps format the hint made the
   model suggest a converter, while without hints it pointed at the caps filter.
-- The LLM's `confidence` is not calibrated: the one wrong holdout answer (`h3`) was `high`. Its cause
-  (an invalid format name) is probably not derivable from the log alone.
+- Before calibration the LLM said `high` on its one wrong answer (`h3`); its cause (an invalid format
+  name) is probably not derivable from the log alone.
 - The catalog heuristic can be wrong with `high` confidence (`h2`, holdout): it is a baseline.
