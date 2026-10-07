@@ -9,7 +9,8 @@ import sys
 import xml.etree.ElementTree as ET
 
 from gstlog import llm
-from gstlog.analyze import SYSTEM_PROMPT, analyze, build_user_prompt
+from gstlog.analyze import SYSTEM_PROMPT, analyze, build_user_prompt, hint_lines
+from gstlog.catalog import CATALOG
 from gstlog.evidence import extract
 from gstlog.parse import LEVEL_RANK, parse_file
 
@@ -30,6 +31,7 @@ def _add_provider_args(p):
     p.add_argument("--api-key-env", help="name of the env var holding the key (never the key itself)")
     p.add_argument("--no-json-mode", action="store_true", help="do not send response_format=json_object")
     p.add_argument("--no-redact", action="store_true", help="send log text without redaction")
+    p.add_argument("--no-hints", action="store_true", help="do not send catalog hints to the LLM")
 
 
 def _evidence(path, args):
@@ -59,6 +61,13 @@ def _read_arg(value):
         with open(value, encoding="utf-8", errors="replace") as f:
             return f.read()
     return value
+
+
+def _read_file(path):
+    if os.path.isfile(path):
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return f.read()
+    return None
 
 
 def _junit_failure(path):
@@ -105,10 +114,18 @@ def cmd_analyze(args):
         if provider is None:
             print("dry run: no LLM configured, nothing would be sent")
             return 0
-        prompt = build_user_prompt(ev, pipeline, failure, not args.no_redact)
+        hints = None if args.no_hints else hint_lines(ev, failure)
+        prompt = build_user_prompt(ev, pipeline, failure, not args.no_redact, hints)
         print(json.dumps(provider.request_preview(SYSTEM_PROMPT, prompt), indent=2))
         return 0
-    _print_diagnosis(analyze(ev, provider, pipeline, failure, not args.no_redact), args.format)
+    _print_diagnosis(analyze(ev, provider, pipeline, failure, not args.no_redact, not args.no_hints), args.format)
+    return 0
+
+
+def cmd_rules(args):
+    print(f"{'id':22} {'score':>5}  {'source':7} verified")
+    for r in sorted(CATALOG, key=lambda r: -r.score):
+        print(f"{r.id:22} {r.score:>5}  {r.source:7} {'yes' if r.verified else 'no'}")
     return 0
 
 
@@ -133,12 +150,14 @@ def cmd_eval(args):
         if name not in expected or not os.path.isfile(log):
             continue
         ev = _evidence(log, args)
-        pipeline = _read_arg(os.path.join(d, "pipeline.txt"))
-        failure = _junit_failure(os.path.join(d, "junit.xml"))
-        diag = analyze(ev, provider, pipeline, failure, not args.no_redact)
+        # --blind: log evidence only, as if the CI report carried no failure message
+        pipeline = None if args.blind else _read_file(os.path.join(d, "pipeline.txt"))
+        failure = None if args.blind else _junit_failure(os.path.join(d, "junit.xml"))
+        diag = analyze(ev, provider, pipeline, failure, not args.no_redact, not args.no_hints)
         ok = _passes(expected[name], diag)
         passed += ok
-        sent = len(build_user_prompt(ev, pipeline, failure, not args.no_redact))
+        hints = None if args.no_hints or provider is None else hint_lines(ev, failure)
+        sent = len(build_user_prompt(ev, pipeline, failure, not args.no_redact, hints))
         rows.append((name, diag["confidence"], "PASS" if ok else "FAIL", os.path.getsize(log), sent,
                      diag["source"][:40]))
     print(f"{'case':26} {'conf':7} {'result':6} {'log bytes':>10} {'sent bytes':>10}  source")
@@ -169,9 +188,14 @@ def build_parser():
     _add_provider_args(p)
     p.set_defaults(func=cmd_analyze)
 
+    p = sub.add_parser("rules", help="list the catalog of known GStreamer error patterns")
+    p.set_defaults(func=cmd_rules)
+
     p = sub.add_parser("eval", help="run all cases in a directory against expected answers")
     p.add_argument("cases")
     p.add_argument("--expected", required=True, help="TSV: case<TAB>term|alt;term|alt")
+    p.add_argument("--blind", action="store_true",
+                   help="ignore pipeline.txt and junit.xml: diagnose from the log evidence alone")
     _add_evidence_args(p)
     _add_provider_args(p)
     p.set_defaults(func=cmd_eval)

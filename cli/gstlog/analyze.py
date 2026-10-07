@@ -6,6 +6,7 @@ import json
 import re
 from typing import Optional
 
+from gstlog.catalog import match
 from gstlog.evidence import Evidence
 from gstlog.llm import LLMError, Provider
 from gstlog.redact import redact
@@ -26,13 +27,21 @@ SYSTEM_PROMPT = (
 CONFIDENCE = {"high", "medium", "low"}
 
 
+def hint_lines(evidence: Evidence, failure: Optional[str] = None, limit: int = 3) -> list:
+    return [f"{m.cause} [{m.rule.id}]. Suggested action: {m.recommendation}"
+            for m in match(evidence, failure)[:limit]]
+
+
 def build_user_prompt(evidence: Evidence, pipeline: Optional[str], failure: Optional[str],
-                      do_redact: bool = True) -> str:
+                      do_redact: bool = True, hints: Optional[list] = None) -> str:
     parts = []
     if pipeline:
         parts.append(f"Pipeline:\n{pipeline.strip()}")
     if failure:
         parts.append(f"Test failure message:\n{failure.strip()[:500]}")
+    if hints:
+        parts.append("Hints from a catalog of common GStreamer errors (they may be wrong; "
+                     "verify them against the evidence):\n" + "\n".join(f"- {h}" for h in hints))
     parts.append("Log evidence:\n" + (evidence.text or "(no ERROR/WARN or trouble-phrase lines found)"))
     text = "\n\n".join(parts)
     return redact(text) if do_redact else text
@@ -56,39 +65,26 @@ def _parse_answer(text: str) -> dict:
     return data
 
 
-# keyword -> (root cause, recommendation); the baseline the LLM must beat.
-_RULES = [
-    (r'no element "([^"]+)"', "Element does not exist",
-     "Install the plugin that provides the element, or fix the element name in the pipeline."),
-    (r"no such file|resource not found", "Input file not found",
-     "Check that the file path exists and is readable by the process."),
-    (r"connection refused|failed to connect", "Connection refused",
-     "Check that the remote service is running and the host/port are correct."),
-    (r"text file|could not determine type|not a (media|valid)", "Input is not decodable media",
-     "Verify the input really is a media file of a supported format."),
-    (r"can't handle caps|not-negotiated|not negotiated", "Caps cannot be negotiated",
-     "Insert a converter/scaler, or relax the caps between the two elements."),
-    (r"could not link", "Elements cannot be linked",
-     "Check that the pads are compatible (media type), or add a converter between them."),
-]
-
-
-def heuristic(evidence: Evidence) -> dict:
+def heuristic(evidence: Evidence, failure: Optional[str] = None) -> dict:
+    """Offline diagnosis from the catalog: the baseline an LLM has to beat."""
+    matches = match(evidence, failure)
+    if matches:
+        m = matches[0]
+        from_severe = m.item is not None and m.item.kind == "severe"
+        if m.rule.score >= 85 and from_severe:
+            confidence = "high"
+        elif m.rule.score >= 60:
+            confidence = "medium"
+        else:
+            confidence = "low"
+        detail = f" Evidence: {m.item.line.message[:140]}" if m.item else ""
+        return {"summary": f"{m.cause}.{detail}", "root_cause": m.cause, "confidence": confidence,
+                "evidence": m.refs, "recommendation": m.recommendation}
     severe = evidence.severe
     if not severe:
-        return {"summary": "No ERROR/WARN lines found in the log.", "root_cause": "unknown",
-                "confidence": "low", "evidence": [],
+        return {"summary": "No ERROR/WARN lines or known trouble phrases found in the log.",
+                "root_cause": "unknown", "confidence": "low", "evidence": [],
                 "recommendation": "Raise GST_DEBUG for the suspect category and retry."}
-    blob = " ".join(i.line.message for i in severe).lower()
-    for pattern, cause, rec in _RULES:
-        m = re.search(pattern, blob)
-        if m:
-            idx = next((n for n, it in enumerate(evidence.items, 1)
-                        if it.kind == "severe" and re.search(pattern, it.line.message.lower())), 1)
-            detail = f" ({m.group(1)})" if m.groups() else ""
-            return {"summary": f"{cause}{detail}: {severe[0].line.message[:160]}",
-                    "root_cause": cause, "confidence": "medium", "evidence": [f"E{idx}"],
-                    "recommendation": rec}
     first = severe[0].line
     return {"summary": f"First problem: {first.message[:200]}", "root_cause": "unclassified",
             "confidence": "low", "evidence": ["E1"],
@@ -96,12 +92,13 @@ def heuristic(evidence: Evidence) -> dict:
 
 
 def analyze(evidence: Evidence, provider: Optional[Provider], pipeline: Optional[str] = None,
-            failure: Optional[str] = None, do_redact: bool = True) -> dict:
+            failure: Optional[str] = None, do_redact: bool = True, use_hints: bool = True) -> dict:
     if provider is None:
-        return {**heuristic(evidence), "source": "heuristic"}
-    prompt = build_user_prompt(evidence, pipeline, failure, do_redact)
+        return {**heuristic(evidence, failure), "source": "heuristic"}
+    hints = hint_lines(evidence, failure) if use_hints else None
+    prompt = build_user_prompt(evidence, pipeline, failure, do_redact, hints)
     try:
         answer = _parse_answer(provider.complete(SYSTEM_PROMPT, prompt))
         return {**answer, "source": f"llm:{provider.name}"}
     except (LLMError, ValueError, json.JSONDecodeError) as e:
-        return {**heuristic(evidence), "source": f"heuristic (LLM failed: {e})"}
+        return {**heuristic(evidence, failure), "source": f"heuristic (LLM failed: {e})"}

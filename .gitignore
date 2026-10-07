@@ -24,3 +24,5 @@ Session.vim
 # Generated failure cases
 gst-cases/
 hard/
+typical/
+holdout/
