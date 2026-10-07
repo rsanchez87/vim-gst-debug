@@ -1,0 +1,7 @@
+# case<TAB>requirements: every ;-group needs at least one |-alternative in the answer (lowercased)
+01_missing_element	nosuchelement;plugin|element|exist
+02_link_incompatible	audiotestsrc;videoconvert
+03_file_not_found	missing_clip|no such file|not found
+04_unknown_stream_type	text|not media|not decodable|plain
+05_connection_refused	refused|connect
+06_caps_not_negotiated	caps|negotiat|gray16

@@ -1,1 +1,25 @@
 sample.log
+
+# Python (cli/)
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.venv/
+venv/
+
+# Secrets: LLM API keys must never be committed
+.env
+.env.*
+
+# Editor / Vim
+.idea/
+*.swp
+*.swo
+*~
+Session.vim
+
+# Generated failure cases
+gst-cases/

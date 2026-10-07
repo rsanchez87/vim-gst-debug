@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gstlog"
+version = "0.1.0"
+description = "GStreamer debug-log evidence extraction and LLM-assisted diagnosis (any OpenAI-compatible provider)"
+requires-python = ">=3.9"
+dependencies = []  # stdlib only
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+gstlog = "gstlog.cli:main"
+
+[tool.setuptools]
+packages = ["gstlog"]
